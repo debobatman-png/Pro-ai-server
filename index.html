@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Loading ad...</title>
+
+  <!-- Telegram Mini App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- AdsGram SDK -->
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #ffffff);
+      --text: var(--tg-theme-text-color, #000000);
+      --hint: var(--tg-theme-hint-color, #777777);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      padding: 24px;
+    }
+    h3 { margin: 0 0 8px; }
+    p { margin: 0; color: var(--hint); font-size: 14px; }
+    .spinner {
+      width: 36px; height: 36px; margin: 0 auto 16px;
+      border: 4px solid var(--hint); border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div>
+    <div class="spinner"></div>
+    <h3>Watch the full video to generate your image</h3>
+    <p>Please don't close the window until the ad finishes.</p>
+  </div>
+
+  <script>
+    // ====== CONFIG ======
+    const ADSGRAM_BLOCK_ID = "YOUR_BLOCK_ID"; // e.g. "12345" (rewarded) or "int-12345" (interstitial)
+    const DEFAULT_PROMPT = "Default image";
+
+    // ====== TELEGRAM INIT ======
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // Decode the start param (expected: base64url-encoded UTF-8 text)
+    function decodePrompt(param) {
+      if (!param) return DEFAULT_PROMPT;
+      try {
+        const b64 = param.replace(/-/g, "+").replace(/_/g, "/");
+        const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      } catch {
+        return param; // fall back to the raw value
+      }
+    }
+
+    const startParam = tg.initDataUnsafe?.start_param;
+    const promptText = decodePrompt(startParam);
+
+    // ====== ADSGRAM ======
+    function finish(message) {
+      if (message) {
+        tg.showAlert(message, () => tg.close());
+      } else {
+        tg.close();
+      }
+    }
+
+    function runAd() {
+      if (!window.Adsgram) {
+        return finish("Ad service failed to load. Please try again.");
+      }
+
+      const AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+
+      AdController.show()
+        .then((result) => {
+          if (result && result.done) {
+            // Ad watched completely -> send data back to the bot
+            tg.sendData(JSON.stringify({ status: "success", prompt: promptText }));
+            // sendData closes the Mini App automatically
+          } else {
+            finish("⚠️ You must watch the full ad to generate the image.");
+          }
+        })
+        .catch((err) => {
+          console.error("AdsGram error:", err);
+          finish("Sorry, no ad is available right now. Please try again later.");
+        });
+    }
+
+    runAd();
+  </script>
+</body>
+</html>
